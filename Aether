@@ -158,7 +158,7 @@ local AutoGatlingRunning = false
 local GatlingExecuted = false
 local AutoPremiumRunning = false
 local StackerErrorShown = false
-local PremiumLoaded = false
+local PremiumLoaded = true
 
 local MaxPathDistance = 300 -- default
 local MilMarker = nil
@@ -186,9 +186,10 @@ local DefaultSettings = {
     AutoReady = false,
     AutoChain = false,
     AutoGatling = false,
-    AutoPremium = true,
+    AutoPremium = false,
     SupportCaravan = false,
     AutoDJ = false,
+    DJCustomSongID = "",
     AutoNecro = false,
     AutoRejoin = true,
     PrivateCode = "",
@@ -274,7 +275,6 @@ TDS = {
     PlacedTowers = {},
     ActiveStrat = true,
     MatchmakingMap = {
-        ["Hardcore"] = "hardcore",
         ["PizzaParty"] = "halloween",
         ["Badlands"] = "badlands",
         ["PollutedWasteland"] = "polluted",
@@ -938,6 +938,7 @@ local IsCurrentlyLoading = false
 
 function TDS:Addons()
     PremiumLoaded = true
+    IsCurrentlyLoading = false
     return true
 end
 
@@ -1084,12 +1085,45 @@ local function StartEasyMode()
     end)
 end
 
+local function AutoSetDJSong(tower)
+    task.spawn(function()
+        local replicator = tower:WaitForChild("TowerReplicator", 10)
+        if not replicator then return end
+        if replicator:GetAttribute("Name") ~= "DJ Booth" then return end
+        if replicator:GetAttribute("OwnerId") ~= LocalPlayer.UserId then return end
+        
+        local songIdNum = tonumber(Globals.DJCustomSongID)
+        if not songIdNum then return end
+        
+        pcall(function()
+            RemoteFunc:InvokeServer(
+                "Troops",
+                "Execute",
+                {
+                    Data = { songIdNum },
+                    Name = "Music",
+                    Tower = tower
+                }
+            )
+        end)
+    end)
+end
+
+task.spawn(function()
+    local Towers = workspace:WaitForChild("Towers", 10)
+    if not Towers then return end
+    Towers.ChildAdded:Connect(AutoSetDJSong)
+    for _, tower in ipairs(Towers:GetChildren()) do
+        AutoSetDJSong(tower)
+    end
+end)
+
 -- // ui
 local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/DuxiiT/auto-strat/refs/heads/main/Sources/UI.lua"))()
 
 local Window = Library:Window({
-    Title = "Vethern",
-    Desc = "cracked from aether",
+    Title = "Aether Hub",
+    Desc = "your #1 hub",
     Theme = "Default",
     DiscordLink = "https://discord.gg/aetherhub",
     Icon = 99432006374500,
@@ -1098,6 +1132,15 @@ local Window = Library:Window({
         Size = UDim2.new(0, 500, 0, 400)
     }
 })
+
+if not LocalPlayer:IsInGroup(4914494) then
+    Window:Notify({
+        Title = "Warning",
+        Desc = "Please consider joining the Paradoxum Group. Otherwise, strategies may not work for you.",
+        Time = 25,
+        Type = "error"
+    })
+end
 
 local Automation = Window:Tab({Title = "Automation", Icon = "bot"}) do
     
@@ -1190,6 +1233,25 @@ local Automation = Window:Tab({Title = "Automation", Icon = "bot"}) do
         Value = Globals.AutoDJ,
         Callback = function(v)
             SetSetting("AutoDJ", v)
+        end
+    })
+
+    Automation:Textbox({
+        Title = "DJ Custom Music",
+        Desc = "Custom audio ID for your DJ Booth (Requires Gamepass)",
+        Placeholder = "Audio ID",
+        Value = Globals.DJCustomSongID or "",
+        ClearTextOnFocus = false,
+        Callback = function(value)
+            SetSetting("DJCustomSongID", value or "")
+            if not tonumber(value) then return end
+            task.spawn(function()
+                local TowersFolder = workspace:FindFirstChild("Towers")
+                if not TowersFolder then return end
+                for _, tower in ipairs(TowersFolder:GetChildren()) do
+                    AutoSetDJSong(tower)
+                end
+            end)
         end
     })
 
@@ -2566,6 +2628,13 @@ local function RejoinMatch()
                 elseif CurrentMode == "Hardcore" then
                     payload = {
                         mode = "hardcore",
+                        difficulty = "Easy",
+                        count = 1
+                    }
+                elseif CurrentMode == "Voidcore" then
+                    payload = {
+                        mode = "hardcore",
+                        difficulty = "Hard",
                         count = 1
                     }
                 elseif CurrentMode == "PollutedWasteland" then
@@ -3149,7 +3218,16 @@ end
 function TDS:Mode(difficulty, code)
     local targetCode = ""
 
-    if not IsMobile then
+    if IsMobile then
+        if (code and code ~= "") or (Globals.PrivateCode and Globals.PrivateCode ~= "") then
+            Window:Notify({
+                Title = "Warning",
+                Desc = "Private server codes are not supported on mobile devices.",
+                Time = 25,
+                Type = "error"
+            })
+        end
+    else
         if code and code ~= "" then
             targetCode = code
         elseif Globals.PrivateCode then
@@ -3220,7 +3298,19 @@ function TDS:Mode(difficulty, code)
                 local mode = TDS.MatchmakingMap[difficulty]
                 local payload
 
-                if mode then
+                if difficulty == "Hardcore" then
+                    payload = {
+                        mode = "hardcore",
+                        difficulty = "Easy",
+                        count = 1
+                    }
+                elseif difficulty == "Voidcore" then
+                    payload = {
+                        mode = "hardcore",
+                        difficulty = "Hard",
+                        count = 1
+                    }
+                elseif mode then
                     payload = {
                         mode = mode,
                         count = 1
@@ -4247,6 +4337,30 @@ local function StartSellFarm()
         end
         SellFarmsRunning = false
     end)
+end
+
+function TDS:RemoveIndex()
+	self.PlacedTowers = {}
+    self.PlacedTraps = {}
+    self.MapInteractions = {}
+  
+    if UpgradeHistory then
+        table.clear(UpgradeHistory)
+    end
+	
+	Logger:Log("CLEARED EVERYTHING: All indexes, upgrade histories, and automated execution loops have been completely reset.")
+end
+
+function TDS:WaitForWave(targetWave)
+    if GameState ~= "GAME" then return false end
+    while self:GetWave() < targetWave do
+        task.wait(0.5)
+    end
+    return true
+end
+
+function TDS:Rejoin()
+SmartTeleportToLobby()
 end
 
 task.spawn(function()
