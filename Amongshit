@@ -1,0 +1,152 @@
+local Players = game:GetService("Players")
+local HttpService = game:GetService("HttpService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+
+local LocalPlayer = Players.LocalPlayer
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+
+local activeStratThread = nil
+
+loadstring(game:HttpGet("https://raw.githubusercontent.com/AmonguszzZ/AetherModded/refs/heads/main/AetherHub.lua"))()
+TDS:Loadout("Assassin", "None", "None", "None", "None")
+    TDS:Mode("PizzaParty")
+
+
+local function StartStrategy()
+wait(1.5)
+TDS:RemoveIndex()
+TDS:VoteSkip(1, 15)
+
+wait(5)
+TDS:Ready()
+TDS:Place("Assassin", 4.420812606811523, 0.9999383687973022, -37.21728515625)
+TDS:Place("Assassin", 4.364051818847656, 1.0368714332580566, -34.56432342529297)
+TDS:Place("Assassin", -0.9526000022888184, 0.9999371767044067, -37.03883361816406)
+TDS:Place("Assassin", -1.389763355255127, 1.0368714332580566, -34.88044357299805)
+TDS:Place("Assassin", -1.052770972251892, 1.0368714332580566, -32.52336883544922)
+TDS:Place("Assassin", 4.39237117767334, 1.0368714332580566, -32.439056396484375)
+TDS:Place("Assassin", 6.251020908355713, 1.0368714332580566, -35.94735336303711)
+TDS:Place("Assassin", 6.403747081756592, 1.0368714332580566, -33.779930114746094)
+TDS:Place("Assassin", 6.467528343200684, 1.0368714332580566, -31.56182289123535)
+TDS:Place("Assassin", 6.226583480834961, 1.0000070333480835, -38.117637634277344)
+TDS:Upgrade(10)
+TDS:Upgrade(10)
+TDS:Upgrade(1)
+TDS:Upgrade(1)
+TDS:Upgrade(2)
+TDS:Upgrade(2)
+TDS:Upgrade(6)
+TDS:Upgrade(8)
+TDS:Upgrade(9)
+TDS:Upgrade(3)
+TDS:Upgrade(4)
+TDS:Upgrade(5)
+TDS:Place("Assassin", 12.98207950592041, 1.0368714332580566, -24.15313720703125)
+TDS:Place("Assassin", 7.609539985656738, 1.0368714332580566, -24.51279067993164)
+TDS:Place("Assassin", 12.350349426269531, 1.0368714332580566, -19.097808837890625)
+TDS:Upgrade(13)
+TDS:Upgrade(11)
+TDS:Upgrade(12)
+TDS:Upgrade(13)
+TDS:Upgrade(6)
+TDS:Upgrade(8)
+TDS:Sell(12)
+TDS:Sell(13)
+TDS:Sell(11)
+TDS:Sell(6)
+TDS:Sell(9)
+TDS:Sell(8)
+TDS:Sell(2)
+TDS:Sell(7)
+TDS:Sell(10)
+TDS:Sell(1)
+TDS:Sell(5)
+TDS:Sell(4)
+TDS:Sell(3)
+
+    
+end
+
+local function GetMatchStatus()
+    local success, status = pcall(function()
+        local uiRoot = PlayerGui:FindFirstChild("ReactGameNewRewards")
+        if not uiRoot then return nil end
+
+        local mainFrame = uiRoot:FindFirstChild("Frame")
+        if not mainFrame or not mainFrame.Visible then return nil end
+
+        local gameOver = mainFrame:FindFirstChild("gameOver")
+        if not gameOver or not gameOver.Visible then return nil end
+
+        local rewardsScreen = gameOver:FindFirstChild("RewardsScreen")
+        if not rewardsScreen or not rewardsScreen.Visible then return nil end
+
+        local topBanner = rewardsScreen:FindFirstChild("RewardBanner")
+        if not topBanner then return nil end
+
+        local label = topBanner:FindFirstChild("textLabel") or topBanner:FindFirstChildOfClass("TextLabel")
+        if not label then return nil end
+
+        local txt = label.Text:upper()
+        if txt == "" then return nil end
+
+        if txt:find("TRIUMPH") or txt:find("VICTORY") or txt:find("WIN") then
+            return "WIN"
+        elseif txt:find("LOST") or txt:find("DEFEAT") or txt:find("FAIL") then
+            return "LOSS"
+        end
+        return nil
+    end)
+    
+    if success then return status end
+    return nil
+end
+
+task.spawn(function()
+    activeStratThread = task.spawn(StartStrategy)
+
+    while true do
+        task.wait(0.5)
+
+        local currentStatus = GetMatchStatus()
+        
+        if currentStatus == "LOSS" then
+            print("Loss detected! Stopping old thread...")
+
+            if activeStratThread and coroutine.status(activeStratThread) ~= "dead" then
+                task.cancel(activeStratThread)
+                activeStratThread = nil
+            end
+
+            -- Fires your exact block 3 times with a 1-second interval
+            print("Firing restart remote 3 times...")
+			wait(5.5)
+            for i = 1, 1 do
+				wait(1)
+                local Event = game:GetService("ReplicatedStorage").RemoteFunction
+                local Result = Event:InvokeServer(
+                    "Voting",
+                    "Skip"
+                )
+                local ExpectedResult = table.unpack({
+                    true
+                })
+                
+                if i < 1 then
+                    task.wait(1)
+                end
+            end
+
+            print("Waiting for match screen to clear...")
+            repeat 
+                task.wait(1) 
+            until GetMatchStatus() == nil
+
+            task.wait(5)
+
+            print("Starting new strategy match!")
+            activeStratThread = task.spawn(StartStrategy)
+        end
+    end
+end)
